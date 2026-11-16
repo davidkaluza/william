@@ -1,0 +1,17 @@
+{
+  "name": "William's Kart",
+  "short_name": "William Kart",
+  "description": "Comic-Rennspiel für Kinder – lenken durch Kippen.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#2a8cff",
+  "theme_color": "#2a8cff",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
