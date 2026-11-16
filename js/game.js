@@ -238,6 +238,7 @@
     const g = c.getContext('2d');
     for (let a = 0; a < 16; a++) g.drawImage(sil, p + Math.cos((a / 16) * Math.PI * 2) * p * 0.85, p + Math.sin((a / 16) * Math.PI * 2) * p * 0.85);
     g.drawImage(img, p, p, w, h);
+    c.worldH = w > h ? 1250 : SPR.user.h;   // Querformat (z.B. Fahrzeuge) etwas kleiner
     return c;
   }
   const userImgs = [];
@@ -454,8 +455,8 @@
 
   // ---------- Spiel-Logik ----------
   function targetSpeed() {
-    if (settings.mode === 'steady') return MAX_SPEED * 0.55;
-    return Math.min(MAX_SPEED * 1.3, MAX_SPEED * (0.4 + elapsed * 0.006));
+    if (settings.mode === 'steady') return MAX_SPEED * 0.42;
+    return Math.min(MAX_SPEED * 1.15, MAX_SPEED * (0.32 + elapsed * 0.005));
   }
   function showBanner(text, color) { banner = { text, color, t: 0, d: 2.2 }; }
   function popup(text, color) { popups.push({ text, color, t: 0 }); }
@@ -488,7 +489,7 @@
       for (const s of pSeg.sprites) {
         const meta = SPR[spriteKind(s)], img = spriteImg(s);
         if (!meta.hit || !img) continue;
-        const sHalf = ((meta.h * (img.width / img.height) * H) / (ROAD_W * W)) * 0.5 * meta.hit;
+        const sHalf = (((img.worldH || meta.h) * (img.width / img.height) * H) / (ROAD_W * W)) * 0.5 * meta.hit;
         if (Math.abs(playerX - s.offset) < kHalf + sHalf) {
           speed *= 0.3; bonkCool = 0.6; shake = 0.35;
           playerX = s.offset - Math.sign(s.offset) * (kHalf + sHalf + 0.05);
@@ -682,7 +683,7 @@
         for (const sp of s.sprites) {
           const img = spriteImg(sp), meta = SPR[spriteKind(sp)];
           if (!img) continue;
-          const h = meta.h * k, w = h * (img.width / img.height);
+          const h = (img.worldH || meta.h) * k, w = h * (img.width / img.height);
           const sx = s.p1.screen.x + sc * sp.offset * ROAD_W * W / 2;
           drawImageClipped(img, sx - w / 2, s.p1.screen.y - h, w, h, s.clip);
         }
@@ -751,8 +752,18 @@
     beep(523, 523, 0.12, 'triangle', 0.12); beep(659, 659, 0.12, 'triangle', 0.12, 0.13); beep(784, 784, 0.3, 'triangle', 0.12, 0.26);
   }
 
+  // Beenden: zurück zum Startbildschirm (eine Web-App kann sich unter iOS nicht selbst schließen)
+  function quit() {
+    panel.hidden = true; hud.hidden = true;
+    restart(); speed = 0; state = 'splash';
+    splash.hidden = false;
+    requestAnimationFrame(() => splash.classList.remove('gone'));
+    splash.addEventListener('click', start, { once: true });
+  }
+
   splash.addEventListener('click', start, { once: true });
   $('gear').addEventListener('click', openSettings);
+  $('quitBtn').addEventListener('click', quit);
   $('closeBtn').addEventListener('click', closeSettings);
   $('restartBtn').addEventListener('click', () => { restart(); closeSettings(); });
   for (const b of panel.querySelectorAll('[data-mode]')) {

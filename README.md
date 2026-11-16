@@ -36,6 +36,7 @@ oder öffnen: **https://davidkaluza.github.io/william/**
 | 🔊 **Ton** | Motor- und Effekt-Töne an oder aus |
 | ↔️ **Lenkung** | Lenkrichtung umdrehen, falls sie andersherum reagiert |
 | ↺ **Neu starten** | Fahrt und Sterne auf null setzen |
+| ⏏ **Beenden** | Zurück zum Startbildschirm |
 
 ## 🖼️ Eigene Personen und Gegenstände
 
