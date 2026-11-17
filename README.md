@@ -35,6 +35,7 @@ oder öffnen: **https://davidkaluza.github.io/william/**
 | 🚀 **Immer schneller** | Das Kart wird mit der Zeit immer schneller |
 | 🔊 **Ton** | Motor- und Effekt-Töne an oder aus |
 | ↔️ **Lenkung** | Lenkrichtung umdrehen, falls sie andersherum reagiert |
+| 🚧 **Hindernisse** | Gegenstände auf der Straße an oder aus |
 | ↺ **Neu starten** | Fahrt und Sterne auf null setzen |
 | ⏏ **Beenden** | Zurück zum Startbildschirm |
 
@@ -47,6 +48,15 @@ Sie erscheinen dann automatisch als Figuren am Straßenrand, mit dickem Comic-Ra
 - `splash.png` ist der Startbildschirm und wird nicht am Straßenrand gezeigt
 - Solange keine eigenen Bilder da sind, winken gezeichnete Comic-Kinder
 - Die Liste `images/list.json` wird beim Veröffentlichen automatisch erstellt. Lokal geht das mit `node tools/build-image-list.mjs`
+
+## 🚧 Hindernisse auf der Straße
+
+Gegenstände, die **auf der Straße im Weg liegen**, kommen in den Ordner **`hindernisse/`** (genau wie bei `images/`).
+Fährt das Kart dagegen, fliegt der Gegenstand mit „BONK!“ davon und das Kart wird kurz langsamer.
+
+- Am besten **PNG mit durchsichtigem Hintergrund**
+- Solange der Ordner leer ist, liegen Pylonen, Wasserbälle, Kisten und Spielwürfel auf der Straße
+- In den Einstellungen lassen sich die Hindernisse ein- und ausschalten (🚧)
 
 ## 🛠️ Technik
 

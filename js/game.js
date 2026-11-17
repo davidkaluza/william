@@ -45,6 +45,7 @@
     mode: store.get('mode', 'steady'),   // 'steady' | 'faster'
     sound: store.get('sound', true),
     invert: store.get('invert', false),
+    obstacles: store.get('obstacles', true),
   };
 
   // ---------- Landschaften ----------
@@ -241,17 +242,52 @@
     c.worldH = w > h ? 1250 : SPR.user.h;   // Querformat (z.B. Fahrzeuge) etwas kleiner
     return c;
   }
-  const userImgs = [];
-  fetch('images/list.json', { cache: 'no-store' })
-    .then(r => (r.ok ? r.json() : []))
-    .then(list => {
-      for (const f of Array.isArray(list) ? list : []) {
-        const img = new Image();
-        img.onload = () => { try { userImgs.push(outlined(img)); } catch { /* ignorieren */ } };
-        img.src = 'images/' + encodeURIComponent(f);
-      }
-    })
-    .catch(() => {});
+  // Hindernisse: Welt-Höhe so, dass sehr breite Bilder nicht die ganze Straße blockieren
+  function obstacleH(c) { const a = c.width / c.height; return a > 1.4 ? (800 * 1.4) / a : 800; }
+
+  function loadList(dir, target, fix) {
+    fetch(dir + '/list.json', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : []))
+      .then(list => {
+        for (const f of Array.isArray(list) ? list : []) {
+          const img = new Image();
+          img.onload = () => { try { const c = outlined(img); if (fix) fix(c); target.push(c); } catch { /* ignorieren */ } };
+          img.src = dir + '/' + encodeURIComponent(f);
+        }
+      })
+      .catch(() => {});
+  }
+  const userImgs = [], userObs = [];
+  loadList('images', userImgs);
+  loadList('hindernisse', userObs, c => { c.worldH = obstacleH(c); });
+
+  // Platzhalter-Hindernisse, solange hindernisse/ leer ist
+  const OBST = [
+    mk(160, 185, g => {   // Pylone
+      blob(g, '#ff7a1a', [rect(8, 150, 144, 28, 8), poly(80, 8, 122, 152, 38, 152)]);
+      const hw = y => 42 * (y - 8) / 144;
+      g.lineWidth = 4; g.fillStyle = '#ffffff';
+      for (const [a, b] of [[52, 76], [100, 124]]) { g.beginPath(); poly(80 - hw(a), a, 80 + hw(a), a, 80 + hw(b), b, 80 - hw(b), b)(g); g.fill(); g.stroke(); }
+    }),
+    mk(150, 150, g => {   // Wasserball
+      g.save(); g.beginPath(); g.arc(75, 75, 66, 0, Math.PI * 2); g.lineWidth = 12; g.stroke(); g.clip();
+      const cols = ['#ff3b3b', '#ffd400', '#2a7bff', '#ffffff', '#20c997', '#ff6fb5'];
+      cols.forEach((c, i) => { g.beginPath(); g.moveTo(75, 75); g.arc(75, 75, 70, (i / 6) * Math.PI * 2, ((i + 1) / 6) * Math.PI * 2); g.closePath(); g.fillStyle = c; g.fill(); });
+      g.restore(); blob(g, '#ffffff', [circ(75, 75, 13)], 5); shine(g, 52, 46, 12);
+    }),
+    mk(170, 150, g => {   // Holzkiste
+      blob(g, '#c98a4b', [rect(10, 10, 150, 130, 8)]);
+      g.lineWidth = 6; g.strokeRect(24, 24, 122, 102);
+      g.beginPath(); g.moveTo(24, 24); g.lineTo(146, 126); g.moveTo(146, 24); g.lineTo(24, 126); g.stroke();
+    }),
+    mk(150, 150, g => {   // Spielwürfel
+      blob(g, '#3d7bff', [rect(10, 10, 130, 130, 14)]);
+      g.font = `900 92px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.lineWidth = 8; g.strokeText('W', 75, 80); g.fillStyle = '#ffd400'; g.fillText('W', 75, 80);
+    }),
+  ];
+  [800, 650, 750, 650].forEach((h, i) => { OBST[i].worldH = h; });
+  const obstImg = o => (userObs.length ? userObs[o.k % userObs.length] : OBST[o.k % OBST.length]);
 
   // ---------- Hintergründe (kachelbar) ----------
   function wave(x, w, parts) { let y = 0; for (const [a, k, ph] of parts) y += a * Math.sin((Math.PI * 2 * k * x) / w + ph); return y; }
@@ -328,7 +364,7 @@
   function addSegment(curve, y, zone) {
     const n = segments.length;
     segments.push({
-      index: n, curve, zone, sprites: [], stars: [], alt: Math.floor(n / RUMBLE) % 2, clip: 0, fog: 0,
+      index: n, curve, zone, sprites: [], stars: [], obstacles: [], alt: Math.floor(n / RUMBLE) % 2, clip: 0, fog: 0,
       p1: { world: { y: lastY(), z: n * SEG }, camera: {}, screen: {} },
       p2: { world: { y, z: (n + 1) * SEG }, camera: {}, screen: {} },
     });
@@ -368,6 +404,7 @@
         s.sprites.push({ type: weighted(z.scenery), offset: (rnd() < 0.5 ? -1 : 1) * (1.45 + rnd() * 1.6) });
       }
       if (i % 5 === 2 && rnd() < 0.7) s.sprites.push({ type: weighted(z.scenery), offset: (rnd() < 0.5 ? -1 : 1) * (3.2 + rnd() * 3.5) });
+      if (i > 80 && i % 37 === 0) s.obstacles.push({ offset: pick([-0.6, -0.2, 0.2, 0.6]), k: Math.floor(rnd() * 1000), hit: false, t: 0, dir: 1 });
       if (i % 80 === 40) {
         const lane = pick([-0.55, 0, 0.55]);
         for (let j = 0; j < 5; j++) segments[(i + j * 4) % N].stars.push({ offset: lane, got: false });
@@ -384,12 +421,39 @@
   let position = 0, playerX = 0, speed = 0, elapsed = 0, starCount = 0;
   let steerVis = 0, offroad = false, bonkCool = 0, shake = 0, time = 0;
   let bgOff = 0, cloudOff = 0, curZone = 0, bgFrom = 0, bgTo = 0, bgT = 1;
-  let banner = null; const popups = [];
+  let banner = null; const popups = [], flying = [];
+  function resetItems() {
+    for (const s of segments) {
+      for (const st of s.stars) st.got = false;
+      for (const o of s.obstacles) { o.hit = false; o.t = 0; }
+    }
+    flying.length = 0;
+  }
+
+  // Echte Bildschirmgröße: Als Home-Bildschirm-App meldet iOS innerHeight teils ohne
+  // den Bereich am unteren Rand (Home-Balken) – dann bleibt ein Streifen frei.
+  function viewportSize() {
+    let w = Math.max(window.innerWidth, document.documentElement.clientWidth);
+    let h = Math.max(window.innerHeight, document.documentElement.clientHeight);
+    const standalone = navigator.standalone === true ||
+      window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+    if (standalone && IS_IOS && screen.width && screen.height) {
+      const short = Math.min(screen.width, screen.height), long = Math.max(screen.width, screen.height);
+      const sw = w > h ? long : short, sh = w > h ? short : long;
+      // nur übernehmen, wenn die App wirklich (fast) den ganzen Bildschirm hat (nicht Split View)
+      if (Math.abs(sw - w) < 4 && sh >= h && sh - h < 80) h = sh;
+    }
+    return [w, h];
+  }
 
   function resize() {
-    W = window.innerWidth; H = window.innerHeight;
-    let s = Math.min(window.devicePixelRatio || 1, 2);
-    if (W * H * s * s > 2.6e6) s = Math.sqrt(2.6e6 / (W * H));
+    [W, H] = viewportSize();
+    document.documentElement.style.setProperty('--app-w', W + 'px');
+    document.documentElement.style.setProperty('--app-h', H + 'px');
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    // Auflösung: bis Retina (max. 3x), begrenzt auf ~4 Mio. Pixel für flüssige 60 fps
+    let s = Math.min(window.devicePixelRatio || 1, 3);
+    if (W * H * s * s > 4e6) s = Math.sqrt(4e6 / (W * H));
     canvas.width = Math.round(W * s); canvas.height = Math.round(H * s);
     ctx.setTransform(s, 0, 0, s, 0, 0);
     kartW = W > H ? Math.min(W * 0.22, H * 0.45) : W * 0.32;
@@ -480,7 +544,7 @@
 
     const old = position;
     position = (position + dt * speed) % trackLen;
-    if (position < old) for (const s of segments) for (const st of s.stars) st.got = false;
+    if (position < old) resetItems();
 
     // Zusammenstöße am Rand – freundlich, ohne Verlieren
     bonkCool -= dt; shake = Math.max(0, shake - dt);
@@ -499,6 +563,23 @@
         }
       }
     }
+    // Hindernisse auf der Straße: werden beim Anfahren weggeschleudert
+    if (settings.obstacles) {
+      for (const s of [segments[(pSeg.index + N - 1) % N], pSeg]) {
+        for (const o of s.obstacles) {
+          if (o.hit) continue;
+          const img = obstImg(o);
+          const oHalf = ((img.worldH * (img.width / img.height) * H) / (ROAD_W * W)) * 0.5 * 0.8;
+          if (Math.abs(playerX - o.offset) < kHalf + oHalf) {
+            o.hit = true; o.t = 0; o.dir = playerX > o.offset ? -1 : 1; flying.push(o);
+            speed *= 0.4; shake = 0.35;
+            popup(pick(['BONK!', 'BUMM!', 'KRACH!', 'HUPS!']), '#ff3b3b');
+            beep(180, 60, 0.3, 'square', 0.12);
+          }
+        }
+      }
+    }
+    for (let i = flying.length - 1; i >= 0; i--) if ((flying[i].t += dt) > 0.7) flying.splice(i, 1);
     // Sterne einsammeln
     for (const s of [pSeg, segments[(pSeg.index + 1) % N]]) {
       for (const st of s.stars) {
@@ -516,6 +597,7 @@
 
     if (pSeg.zone !== curZone) {
       curZone = pSeg.zone; bgFrom = bgTo; bgTo = curZone; bgT = 0;
+      document.body.style.background = ZONES[curZone].grass[0];
       showBanner(ZONES[curZone].name + '!');
       beep(660, 990, 0.15, 'triangle', 0.1);
     }
@@ -693,6 +775,18 @@
           const sy = s.p1.screen.y - h - 220 * k + Math.sin(time * 5 + s.index) * 60 * k;
           drawImageClipped(SPRITES.star, sx - h / 2, sy, h, h, s.clip);
         }
+        if (settings.obstacles) {
+          for (const o of s.obstacles) {
+            if (o.hit && o.t >= 0.7) continue;
+            const img = obstImg(o), h = img.worldH * k, w = h * (img.width / img.height);
+            const off = o.offset + (o.hit ? o.dir * o.t * 3 : 0);
+            const lift = o.hit ? Math.sin(Math.min(1, o.t / 0.7) * Math.PI) * 1500 * k : 0;
+            const sx = s.p1.screen.x + sc * off * ROAD_W * W / 2;
+            if (o.hit) ctx.globalAlpha = (1 - s.fog * 0.9) * (1 - o.t / 0.7);
+            drawImageClipped(img, sx - w / 2, s.p1.screen.y - h - lift, w, h, o.hit ? H : s.clip);
+            ctx.globalAlpha = 1 - s.fog * 0.9;
+          }
+        }
         ctx.globalAlpha = 1;
       }
       if (s === pSeg) drawPlayer();
@@ -723,13 +817,14 @@
   function restart() {
     position = 0; playerX = 0; speed = 0; elapsed = 0; starCount = 0;
     curZone = 0; bgFrom = bgTo = 0; bgT = 1; banner = null; popups.length = 0;
-    for (const s of segments) for (const st of s.stars) st.got = false;
+    resetItems();
     $('starCount').textContent = '0';
   }
   function syncSettingsUI() {
     for (const b of panel.querySelectorAll('[data-mode]')) b.classList.toggle('on', b.dataset.mode === settings.mode);
     $('soundBtn').textContent = settings.sound ? '🔊 Ton an' : '🔇 Ton aus';
     $('invertBtn').textContent = settings.invert ? '↔️ Lenkung umgedreht' : '↔️ Lenkung normal';
+    $('obstBtn').textContent = settings.obstacles ? '🚧 Hindernisse an' : '🚧 Hindernisse aus';
   }
   function openSettings() { if (state !== 'play') return; state = 'settings'; syncSettingsUI(); panel.hidden = false; }
   function closeSettings() { panel.hidden = true; state = 'play'; last = performance.now(); initAudio(); }
@@ -777,7 +872,11 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) openSettings(); });
   document.addEventListener('gesturestart', e => e.preventDefault());
   window.addEventListener('resize', resize);
-  window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+  $('obstBtn').addEventListener('click', () => { settings.obstacles = !settings.obstacles; store.set('obstacles', settings.obstacles); syncSettingsUI(); });
+  // iOS meldet die neue Größe nach dem Drehen teils verzögert – mehrfach nachmessen
+  window.addEventListener('orientationchange', () => { for (const ms of [100, 300, 700, 1200]) setTimeout(resize, ms); });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+  window.addEventListener('pageshow', resize);
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

@@ -3,7 +3,7 @@
 const CACHE = 'william-__BUILD__';
 const SHELL = [
   './', 'index.html', 'css/style.css', 'js/game.js', 'manifest.webmanifest',
-  'images/splash.png', 'images/list.json',
+  'images/splash.png', 'images/list.json', 'hindernisse/list.json',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 
