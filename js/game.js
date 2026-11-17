@@ -417,6 +417,7 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0, kartW = 100, kartH = 72;
+  let HZ = 0, YS = 0, SK = 0;   // Horizont-Höhe, Höhen-Maßstab der Straße, Maßstab der Objekte
   let state = 'splash';                  // 'splash' | 'play' | 'settings'
   let position = 0, playerX = 0, speed = 0, elapsed = 0, starCount = 0;
   let steerVis = 0, offroad = false, bonkCool = 0, shake = 0, time = 0;
@@ -430,6 +431,10 @@
     flying.length = 0;
   }
 
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:100vh;height:100lvh;visibility:hidden;pointer-events:none';
+  document.body.appendChild(probe);
+
   // Echte Bildschirmgröße: Als Home-Bildschirm-App meldet iOS innerHeight teils ohne
   // den Bereich am unteren Rand (Home-Balken) – dann bleibt ein Streifen frei.
   function viewportSize() {
@@ -437,13 +442,17 @@
     let h = Math.max(window.innerHeight, document.documentElement.clientHeight);
     const standalone = navigator.standalone === true ||
       window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
-    if (standalone && IS_IOS && screen.width && screen.height) {
-      const short = Math.min(screen.width, screen.height), long = Math.max(screen.width, screen.height);
-      const sw = w > h ? long : short, sh = w > h ? short : long;
-      // nur übernehmen, wenn die App wirklich (fast) den ganzen Bildschirm hat (nicht Split View)
-      if (Math.abs(sw - w) < 4 && sh >= h && sh - h < 80) h = sh;
+    if (standalone) {
+      // größte von CSS gemeldete Höhe (100lvh/100vh) – reicht bis unter den Home-Balken
+      h = Math.max(h, probe.getBoundingClientRect().height);
+      if (IS_IOS && screen.width && screen.height) {
+        const short = Math.min(screen.width, screen.height), long = Math.max(screen.width, screen.height);
+        const sw = w > h ? long : short, sh = w > h ? short : long;
+        // nur übernehmen, wenn die App die volle Breite hat (nicht Split View)
+        if (Math.abs(sw - w) < 12 && sh > h && sh - h < 120) h = sh;
+      }
     }
-    return [w, h];
+    return [Math.round(w), Math.round(h)];
   }
 
   function resize() {
@@ -456,7 +465,14 @@
     if (W * H * s * s > 4e6) s = Math.sqrt(4e6 / (W * H));
     canvas.width = Math.round(W * s); canvas.height = Math.round(H * s);
     ctx.setTransform(s, 0, 0, s, 0, 0);
-    kartW = W > H ? Math.min(W * 0.22, H * 0.45) : W * 0.32;
+    // Hochformat: Horizont höher, damit mehr Straße und weniger Himmel zu sehen ist;
+    // Objekte richten sich nach der Breite, damit sie nicht riesig werden.
+    const portrait = H > W;
+    // iPad hochkant ≈ 0.45, iPhone hochkant ≈ 0.33, quer 0.5
+    HZ = H * (portrait ? clamp(0.5 - (H / W - 1) * 0.15, 0.32, 0.5) : 0.5);
+    YS = H - HZ;
+    SK = Math.min(YS, W * 0.55);
+    kartW = portrait ? W * 0.4 : Math.min(W * 0.22, H * 0.45);
     kartH = (kartW * 230) / 320;
   }
 
@@ -553,7 +569,7 @@
       for (const s of pSeg.sprites) {
         const meta = SPR[spriteKind(s)], img = spriteImg(s);
         if (!meta.hit || !img) continue;
-        const sHalf = (((img.worldH || meta.h) * (img.width / img.height) * H) / (ROAD_W * W)) * 0.5 * meta.hit;
+        const sHalf = (((img.worldH || meta.h) * (img.width / img.height) * 2 * SK) / (ROAD_W * W)) * 0.5 * meta.hit;
         if (Math.abs(playerX - s.offset) < kHalf + sHalf) {
           speed *= 0.3; bonkCool = 0.6; shake = 0.35;
           playerX = s.offset - Math.sign(s.offset) * (kHalf + sHalf + 0.05);
@@ -569,7 +585,7 @@
         for (const o of s.obstacles) {
           if (o.hit) continue;
           const img = obstImg(o);
-          const oHalf = ((img.worldH * (img.width / img.height) * H) / (ROAD_W * W)) * 0.5 * 0.8;
+          const oHalf = ((img.worldH * (img.width / img.height) * 2 * SK) / (ROAD_W * W)) * 0.5 * 0.8;
           if (Math.abs(playerX - o.offset) < kHalf + oHalf) {
             o.hit = true; o.t = 0; o.dir = playerX > o.offset ? -1 : 1; flying.push(o);
             speed *= 0.4; shake = 0.35;
@@ -597,7 +613,7 @@
 
     if (pSeg.zone !== curZone) {
       curZone = pSeg.zone; bgFrom = bgTo; bgTo = curZone; bgT = 0;
-      document.body.style.background = ZONES[curZone].grass[0];
+      document.body.style.background = document.documentElement.style.background = ZONES[curZone].grass[0];
       showBanner(ZONES[curZone].name + '!');
       beep(660, 990, 0.15, 'triangle', 0.1);
     }
@@ -617,7 +633,7 @@
     p.camera.x = -camX; p.camera.y = p.world.y - camY; p.camera.z = p.world.z - camZ;
     const sc = (p.screen.scale = CAM_DEPTH / p.camera.z);
     p.screen.x = W / 2 + sc * p.camera.x * W / 2;
-    p.screen.y = H / 2 - sc * p.camera.y * H / 2;
+    p.screen.y = HZ - sc * p.camera.y * YS;
     p.screen.w = sc * ROAD_W * W / 2;
   }
   function quad(x1, y1, x2, y2, x3, y3, x4, y4, col) {
@@ -627,7 +643,14 @@
 
   function drawSegment(s) {
     const z = ZONES[s.zone], a = s.alt;
-    const { x: x1, y: y1, w: w1 } = s.p1.screen, { x: x2, y: y2, w: w2 } = s.p2.screen;
+    let { x: x1, y: y1, w: w1 } = s.p1.screen;
+    const { x: x2, y: y2, w: w2 } = s.p2.screen;
+    // Segmente direkt vor der Kamera ragen weit unter den Bildschirm: am unteren Rand
+    // abschneiden, sonst entstehen riesige Koordinaten und Linienbreiten (sehr langsam)
+    if (y1 > H + 2) {
+      const t = (H + 2 - y2) / (y1 - y2);
+      x1 = x2 + (x1 - x2) * t; w1 = w2 + (w1 - w2) * t; y1 = H + 2;
+    }
     const yb = y1 + 1;
     ctx.fillStyle = z.grass[a]; ctx.fillRect(0, y2, W, yb - y2);
     const r1 = w1 / 6, r2 = w2 / 6;
@@ -652,22 +675,22 @@
   }
 
   function drawSky(zi, alpha) {
-    const z = ZONES[zi], g = ctx.createLinearGradient(0, 0, 0, H / 2);
+    const z = ZONES[zi], g = ctx.createLinearGradient(0, 0, 0, HZ);
     g.addColorStop(0, z.sky[0]); g.addColorStop(1, z.sky[1]);
-    ctx.globalAlpha = alpha; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H / 2 + 2); ctx.globalAlpha = 1;
+    ctx.globalAlpha = alpha; ctx.fillStyle = g; ctx.fillRect(0, 0, W, HZ + 2); ctx.globalAlpha = 1;
   }
   function drawLayer(zi, alpha) {
-    const c = BG[ZONES[zi].bg], lh = H * 0.3, s = lh / c.height, tw = c.width * s;
+    const c = BG[ZONES[zi].bg], lh = Math.min(H * 0.3, W * 0.45), s = lh / c.height, tw = c.width * s;
     const ox = -((((bgOff * s) % tw) + tw) % tw);
     ctx.globalAlpha = alpha;
-    for (let x = ox; x < W; x += tw) ctx.drawImage(c, x, H / 2 - lh + 1, tw + 1, lh);
+    for (let x = ox; x < W; x += tw) ctx.drawImage(c, x, HZ - lh + 1, tw + 1, lh);
     ctx.globalAlpha = 1;
   }
   let dotPattern = null;
   function drawBackground() {
     if (bgT < 1) { drawSky(bgFrom, 1); drawSky(bgTo, bgT); } else drawSky(bgTo, 1);
     dotPattern = dotPattern || ctx.createPattern(DOTS, 'repeat');
-    ctx.fillStyle = dotPattern; ctx.fillRect(0, 0, W, H / 2);
+    ctx.fillStyle = dotPattern; ctx.fillRect(0, 0, W, HZ);
     // Sonne
     const sr = Math.min(W, H) * 0.07, sx = W * 0.82 - ((bgOff * 0.05) % W), sy = H * 0.14;
     ctx.save(); ctx.translate(sx, sy); ctx.strokeStyle = '#ffb000'; ctx.lineWidth = sr * 0.12; ctx.lineCap = 'round';
@@ -681,7 +704,7 @@
       ctx.drawImage(CLOUD, x, fy * H, cw * fs, cw * fs * 0.5);
     }
     if (bgT < 1) { drawLayer(bgFrom, 1); drawLayer(bgTo, bgT); } else drawLayer(bgTo, 1);
-    ctx.fillStyle = ZONES[bgTo].grass[0]; ctx.fillRect(0, H / 2, W, H / 2);
+    ctx.fillStyle = ZONES[bgTo].grass[0]; ctx.fillRect(0, HZ, W, H - HZ);
   }
 
   function drawPlayer() {
@@ -700,7 +723,7 @@
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, r0 = R * (0.45 + Math.random() * 0.15);
       ctx.lineWidth = 2 + Math.random() * 3;
-      line(W / 2 + Math.cos(a) * r0, H / 2 + Math.sin(a) * r0 * 0.7, W / 2 + Math.cos(a) * (r0 + R * 0.3), H / 2 + Math.sin(a) * (r0 + R * 0.3) * 0.7);
+      line(W / 2 + Math.cos(a) * r0, HZ + Math.sin(a) * r0 * 0.7, W / 2 + Math.cos(a) * (r0 + R * 0.3), HZ + Math.sin(a) * (r0 + R * 0.3) * 0.7);
     }
   }
 
@@ -760,7 +783,7 @@
     for (let n = DRAW - 1; n >= 0; n--) {
       const s = segments[(base.index + n) % N];
       if (s.p1.camera.z > CAM_DEPTH) {
-        const sc = s.p1.screen.scale, k = (sc * H) / 2;
+        const sc = s.p1.screen.scale, k = sc * SK;
         ctx.globalAlpha = 1 - s.fog * 0.9;
         for (const sp of s.sprites) {
           const img = spriteImg(sp), meta = SPR[spriteKind(sp)];
