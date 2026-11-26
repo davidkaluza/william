@@ -441,10 +441,11 @@
   document.body.appendChild(safeProbe);
   let sizeInfo = '';
 
-  // Echte Bildschirmgröße: Als Home-Bildschirm-App meldet iOS innerHeight teils ohne
-  // den Bereich am unteren Rand (Home-Balken) – dann bleibt ein Streifen frei.
+  // Spielgröße = sichtbarer Bereich. Die Statusleiste ist bewusst nicht durchsichtig
+  // (index.html): bei "black-translucent" zieht iOS die Statusleiste von der Höhe ab,
+  // obwohl der Inhalt ganz oben beginnt – unten blieb dann ein Streifen frei.
   function viewportSize() {
-    let w = Math.max(window.innerWidth, document.documentElement.clientWidth);
+    const w = Math.max(window.innerWidth, document.documentElement.clientWidth);
     let h = Math.max(window.innerHeight, document.documentElement.clientHeight);
     const standalone = navigator.standalone === true ||
       window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
@@ -452,23 +453,9 @@
     const safeTop = parseFloat(cs.paddingTop) || 0, safeBottom = parseFloat(cs.paddingBottom) || 0;
     const inner = [window.innerWidth, window.innerHeight];
     let how = 'inner';
-    if (standalone) {
-      // größte von CSS gemeldete Höhe (100lvh/100vh) – reicht bis unter den Home-Balken
-      const lvh = probe.getBoundingClientRect().height;
-      if (lvh > h) { h = lvh; how = 'lvh'; }
-      if (IS_IOS) {
-        const short = Math.min(screen.width, screen.height), long = Math.max(screen.width, screen.height);
-        const sw = w > h ? long : short, sh = w > h ? short : long;
-        if (short && Math.abs(sw - w) < 12 && sh > h && sh - h < 120) {
-          // App hat die volle Bildschirmbreite: volle Bildschirmhöhe verwenden
-          h = sh; how = 'screen';
-        } else if (safeTop > 0 && how === 'inner') {
-          // iPad-Fenster/Statusleiste: iOS zieht die Statusleiste von der Höhe ab,
-          // der Inhalt beginnt aber ganz oben – unten bleibt genau so viel frei
-          h += safeTop; how = 'safe';
-        }
-      }
-    }
+    // 100vh/100lvh kann auf iPhones mit Home-Balken etwas größer sein als innerHeight
+    const lvh = probe.getBoundingClientRect().height;
+    if (standalone && lvh > h && lvh - h <= safeBottom + 1) { h = lvh; how = 'lvh'; }
     sizeInfo = `Fenster ${inner[0]}×${inner[1]} · Bildschirm ${screen.width}×${screen.height} · ` +
       `Abstand oben ${safeTop} unten ${safeBottom} · App ${standalone ? 'ja' : 'nein'} · ` +
       `Spiel ${Math.round(w)}×${Math.round(h)} (${how}) · Pixel ×${window.devicePixelRatio}`;
