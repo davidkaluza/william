@@ -434,6 +434,12 @@
   const probe = document.createElement('div');
   probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:100vh;height:100lvh;visibility:hidden;pointer-events:none';
   document.body.appendChild(probe);
+  // misst die Sicherheitsabstände (Statusleiste oben, Home-Balken unten)
+  const safeProbe = document.createElement('div');
+  safeProbe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;' +
+    'padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)';
+  document.body.appendChild(safeProbe);
+  let sizeInfo = '';
 
   // Echte Bildschirmgröße: Als Home-Bildschirm-App meldet iOS innerHeight teils ohne
   // den Bereich am unteren Rand (Home-Balken) – dann bleibt ein Streifen frei.
@@ -442,16 +448,30 @@
     let h = Math.max(window.innerHeight, document.documentElement.clientHeight);
     const standalone = navigator.standalone === true ||
       window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+    const cs = getComputedStyle(safeProbe);
+    const safeTop = parseFloat(cs.paddingTop) || 0, safeBottom = parseFloat(cs.paddingBottom) || 0;
+    const inner = [window.innerWidth, window.innerHeight];
+    let how = 'inner';
     if (standalone) {
       // größte von CSS gemeldete Höhe (100lvh/100vh) – reicht bis unter den Home-Balken
-      h = Math.max(h, probe.getBoundingClientRect().height);
-      if (IS_IOS && screen.width && screen.height) {
+      const lvh = probe.getBoundingClientRect().height;
+      if (lvh > h) { h = lvh; how = 'lvh'; }
+      if (IS_IOS) {
         const short = Math.min(screen.width, screen.height), long = Math.max(screen.width, screen.height);
         const sw = w > h ? long : short, sh = w > h ? short : long;
-        // nur übernehmen, wenn die App die volle Breite hat (nicht Split View)
-        if (Math.abs(sw - w) < 12 && sh > h && sh - h < 120) h = sh;
+        if (short && Math.abs(sw - w) < 12 && sh > h && sh - h < 120) {
+          // App hat die volle Bildschirmbreite: volle Bildschirmhöhe verwenden
+          h = sh; how = 'screen';
+        } else if (safeTop > 0 && how === 'inner') {
+          // iPad-Fenster/Statusleiste: iOS zieht die Statusleiste von der Höhe ab,
+          // der Inhalt beginnt aber ganz oben – unten bleibt genau so viel frei
+          h += safeTop; how = 'safe';
+        }
       }
     }
+    sizeInfo = `Fenster ${inner[0]}×${inner[1]} · Bildschirm ${screen.width}×${screen.height} · ` +
+      `Abstand oben ${safeTop} unten ${safeBottom} · App ${standalone ? 'ja' : 'nein'} · ` +
+      `Spiel ${Math.round(w)}×${Math.round(h)} (${how}) · Pixel ×${window.devicePixelRatio}`;
     return [Math.round(w), Math.round(h)];
   }
 
@@ -848,6 +868,7 @@
     $('soundBtn').textContent = settings.sound ? '🔊 Ton an' : '🔇 Ton aus';
     $('invertBtn').textContent = settings.invert ? '↔️ Lenkung umgedreht' : '↔️ Lenkung normal';
     $('obstBtn').textContent = settings.obstacles ? '🚧 Hindernisse an' : '🚧 Hindernisse aus';
+    $('sizeInfo').textContent = sizeInfo;
   }
   function openSettings() { if (state !== 'play') return; state = 'settings'; syncSettingsUI(); panel.hidden = false; }
   function closeSettings() { panel.hidden = true; state = 'play'; last = performance.now(); initAudio(); }
