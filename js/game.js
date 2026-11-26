@@ -441,9 +441,10 @@
   document.body.appendChild(safeProbe);
   let sizeInfo = '';
 
-  // Spielgröße = sichtbarer Bereich. Die Statusleiste ist bewusst nicht durchsichtig
-  // (index.html): bei "black-translucent" zieht iOS die Statusleiste von der Höhe ab,
-  // obwohl der Inhalt ganz oben beginnt – unten blieb dann ein Streifen frei.
+  // Spielgröße: Die Statusleiste ist durchsichtig (index.html, "black-translucent"),
+  // das Spiel soll den ganzen Bildschirm füllen. iOS meldet als Home-Bildschirm-App
+  // dabei innerHeight ohne Statusleiste (iPad: 748 statt 768) – unten blieb ein Streifen.
+  // Deshalb: hat die App die volle Bildschirmbreite, gilt die volle Bildschirmhöhe.
   function viewportSize() {
     const w = Math.max(window.innerWidth, document.documentElement.clientWidth);
     let h = Math.max(window.innerHeight, document.documentElement.clientHeight);
@@ -453,12 +454,16 @@
     const safeTop = parseFloat(cs.paddingTop) || 0, safeBottom = parseFloat(cs.paddingBottom) || 0;
     const inner = [window.innerWidth, window.innerHeight];
     let how = 'inner';
-    // 100vh/100lvh kann auf iPhones mit Home-Balken etwas größer sein als innerHeight
-    const lvh = probe.getBoundingClientRect().height;
-    if (standalone && lvh > h && lvh - h <= safeBottom + 1) { h = lvh; how = 'lvh'; }
-    sizeInfo = `Fenster ${inner[0]}×${inner[1]} · Bildschirm ${screen.width}×${screen.height} · ` +
-      `Abstand oben ${safeTop} unten ${safeBottom} · App ${standalone ? 'ja' : 'nein'} · ` +
-      `Spiel ${Math.round(w)}×${Math.round(h)} (${how}) · Pixel ×${window.devicePixelRatio}`;
+    if (standalone) {
+      const lvh = probe.getBoundingClientRect().height;   // 100lvh bzw. 100vh
+      if (lvh > h) { h = lvh; how = 'vh'; }
+      const short = Math.min(screen.width, screen.height), long = Math.max(screen.width, screen.height);
+      const sw = w > h ? long : short, sh = w > h ? short : long;
+      if (short && Math.abs(sw - w) < 12 && sh > h) { h = sh; how = 'screen'; }
+      else if (IS_IOS && safeTop > 0 && how === 'inner') { h += safeTop; how = 'safe'; }
+    }
+    sizeInfo = `Spiel ${Math.round(w)}×${Math.round(h)} (${how}) · App ${standalone ? 'ja' : 'nein'} · ` +
+      `Fenster ${inner[0]}×${inner[1]} · Bildschirm ${screen.width}×${screen.height} · oben ${safeTop} unten ${safeBottom}`;
     return [Math.round(w), Math.round(h)];
   }
 
@@ -466,6 +471,9 @@
     [W, H] = viewportSize();
     document.documentElement.style.setProperty('--app-w', W + 'px');
     document.documentElement.style.setProperty('--app-h', H + 'px');
+    // auch die Seite selbst so hoch machen, sonst schneidet ältere iOS-Versionen bei innerHeight ab
+    document.documentElement.style.height = document.body.style.height = H + 'px';
+    window.scrollTo(0, 0);
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     // Auflösung: bis Retina (max. 3x), begrenzt auf ~4 Mio. Pixel für flüssige 60 fps
     let s = Math.min(window.devicePixelRatio || 1, 3);
